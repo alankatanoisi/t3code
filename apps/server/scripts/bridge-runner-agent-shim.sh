@@ -1,22 +1,40 @@
 #!/bin/sh
-# Bridge Runner shim.
+# Bridge Runner shim — LIVE since 2026-08-24 (Slice C acceptance).
 #
-# T3 Code's Cursor driver expects to launch a command-line program. It first asks that
-# program "who are you?" (`about --format json`), and then asks it to speak the Agent
-# Client Protocol (`acp`). This shim answers the first question with fixed fake details
-# and hands the second one to our mock agent.
+# T3 Code's Cursor driver launches a command-line program twice: first
+# `about --format json` ("who are you?" — answered here with fixed placeholder
+# details that satisfy the driver's version/auth gate), then `acp` for the
+# real Agent Client Protocol session.
 #
-# Nothing here contacts Cursor, and no credential is read. The email below is a
-# placeholder string that only makes T3's "is this provider usable?" check pass.
+# The `acp` invocation now execs the REAL bridge runner ACP agent in the
+# playground repo. It talks to the local bridge on 127.0.0.1:11437, so turns
+# spend real model calls through Alan's Claude Code credentials.
+#
+# Capability posture (deliberate):
+#   - no --capabilities flag  → core read-only tool set; file edits are OFF
+#   - --trust-workspace       → records workspace trust for the thread cwd,
+#                               because a headless process cannot answer the
+#                               interactive trust prompt (fail-closed otherwise)
+#   - shell stays off          → only an explicit --allow-shell here could
+#                               enable it; never add it casually
+# To allow file edits (still approval-gated per write in Ask mode), append:
+#   --capabilities edits
+#
+# The previous mock agent is kept at bridge-runner-mock-agent.ts; point the
+# exec back at it to return to the no-spend demo.
 
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 NODE_BIN="${BRIDGE_RUNNER_NODE:-/usr/local/bin/node}"
+ACP_AGENT="/Users/alanman/Developer/claude-local-bridge-playground/bin/local-bridge-acp.js"
 
 case "$1" in
   about)
-    echo '{"cliVersion":"2026.04.09-bridge-runner-mock","userEmail":"bridge-runner@localhost","subscriptionTier":"local"}'
+    echo '{"cliVersion":"2026.08.24-bridge-runner-live","userEmail":"bridge-runner@localhost","subscriptionTier":"local"}'
     exit 0
     ;;
 esac
 
-exec "$NODE_BIN" "$SCRIPT_DIR/bridge-runner-mock-agent.ts" "$@"
+# "$@" carries the `acp` subcommand token; the agent binary tolerates it.
+# --capabilities edits: enabled 2026-08-24 for the approval-card acceptance;
+# every write still asks for an approval card in Supervised mode.
+exec "$NODE_BIN" "$ACP_AGENT" --trust-workspace --capabilities edits "$@"
